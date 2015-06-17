@@ -1,0 +1,141 @@
+#
+# Recommended minimum configuration:
+#
+
+# Example rule allowing access from your local networks.
+# Adapt to list your (internal) IP networks from where browsing
+# should be allowed
+#acl localnet src 10.0.0.0/8    # RFC1918 possible internal network
+#acl localnet src 172.16.0.0/12 # RFC1918 possible internal network
+#acl localnet src 192.168.0.0/16        # RFC1918 possible internal network
+#acl localnet src fc00::/7       # RFC 4193 local private network range
+#acl localnet src fe80::/10      # RFC 4291 link-local (directly plugged) machines
+acl localnet src 10.16.106.0/24
+
+# Block Web Sites
+acl restricted_domains dstdomain .youtube.com .googlevideo.com .ytimg.com .facebook.com .twitter.com .instagram.com .vimeo.com .jango.com
+acl gLogin dstdomain accounts.youtube.com
+#acl UsersGroupA proxy_auth "/etc/squid/groupa.txt"
+#acl SitesGroupA dstdomain "/etc/squid/sites.a.txt"
+acl http proto http
+acl deny_rep_mime_flashvideo rep_mime_type video/flv
+acl badfiles urlpath_regex "/etc/squid/bad_files.acl"
+http_reply_access deny deny_rep_mime_flashvideo
+
+# ACL for Windows Update
+acl windowsupdate dstdomain windowsupdate.microsoft.com
+acl windowsupdate dstdomain .update.microsoft.com
+acl windowsupdate dstdomain download.windowsupdate.com
+acl windowsupdate dstdomain redir.metaservices.microsoft.com
+acl windowsupdate dstdomain images.metaservices.microsoft.com
+acl windowsupdate dstdomain c.microsoft.com
+acl windowsupdate dstdomain www.download.windowsupdate.com
+acl windowsupdate dstdomain wustat.windows.com
+acl windowsupdate dstdomain crl.microsoft.com
+acl windowsupdate dstdomain sls.microsoft.com
+acl windowsupdate dstdomain productactivation.one.microsoft.com
+acl windowsupdate dstdomain ntservicepack.microsoft.com
+acl peakperiod time 10:00-16:00
+delay_pools 1
+delay_class 1 1
+# 64 Kbit/s
+delay_parameters 1 8000/8000
+delay_access 1 allow windowsupdate peakperiod
+
+# ACL for User Authentication on Squid Proxy
+acl CONNECT method CONNECT
+auth_param basic program /usr/lib64/squid/basic_ncsa_auth /etc/squid/squid_passwd
+auth_param basic children 5
+auth_param basic realm Squid Basic Authentication
+auth_param negotiate keep_alive on
+acl password proxy_auth REQUIRED
+
+acl SSL_ports port 443
+acl SSL_ports port 10106
+acl Safe_ports port 80          # http
+acl Safe_ports port 21          # ftp
+acl Safe_ports port 443         # https
+acl Safe_ports port 70          # gopher
+acl Safe_ports port 210         # wais
+acl Safe_ports port 1025-65535  # unregistered ports
+acl Safe_ports port 280         # http-mgmt
+acl Safe_ports port 488         # gss-http
+acl Safe_ports port 591         # filemaker
+acl Safe_ports port 777         # multiling http
+acl Safe_ports port 995         # office 365
+acl Safe_ports port 993         # Office 365
+acl Safe_ports port 587         # Office 365
+acl CONNECT method CONNECT
+acl wuCONNECT dstdomain www.update.microsoft.com
+acl wuCONNECT dstdomain sls.microsoft.com
+
+#look for ipv4 first
+dns_v4_first on
+
+#DNS Name Servers
+dns_nameservers 8.8.8.8 8.8.4.4
+
+#
+# Recommended minimum Access Permission configuration:
+#
+# Deny requests to certain unsafe ports
+http_access deny !Safe_ports
+
+# Deny CONNECT to other than secure SSL ports
+http_access deny CONNECT !SSL_ports
+
+# Only allow cachemgr access from localhost
+http_access allow localhost manager
+http_access deny manager
+http_access deny restricted_domains !gLogin
+http_access allow password
+http_access allow CONNECT wuCONNECT localnet
+http_access allow windowsupdate localnet
+#http_access allow SitesGroupA
+
+# We strongly recommend the following be uncommented to protect innocent
+# web applications running on the proxy server who think the only
+# one who can access services on "localhost" is a local user
+#http_access deny to_localhost
+
+#
+# INSERT YOUR OWN RULE(S) HERE TO ALLOW ACCESS FROM YOUR CLIENTS
+#
+
+# Example rule allowing access from your local networks.
+# Adapt localnet in the ACL section to list your (internal) IP networks
+# from where browsing should be allowed
+http_access allow localnet
+http_access allow localhost
+http_access deny badfiles localnet
+
+# And finally deny all other access to this proxy
+http_access deny all
+
+# Squid normally listens to port 3128
+http_port 10000
+
+# Uncomment and adjust the following to add a disk cache directory.
+cache_dir ufs /var/spool/squid 1024 16 256
+
+# Leave coredumps in the first cache dir
+coredump_dir /var/spool/squid
+
+# Cache Administrator Squid (Proxy Engine)
+cache_mgr IT&C@RGTS
+
+#
+# Add any of your own refresh_pattern entries above these.
+#
+refresh_pattern -i \.(gif|png|jpg|jpeg|ico)$ 10080 90% 43200 override-expire ignore-no-cache ignore-no-store ignore-private
+refresh_pattern -i \.(iso|avi|wav|mp3|mp4|mpeg|swf|flv|x-flv)$ 43200 90% 432000 override-expire ignore-no-cache ignore-no-store ignore-private
+refresh_pattern -i \.(deb|rpm|exe|zip|tar|tgz|ram|rar|bin|ppt|doc|tiff)$ 10080 90% 43200 override-expire ignore-no-cache ignore-no-store ignore-private
+refresh_pattern -i \.index.(html|htm)$ 0 40% 10080
+refresh_pattern -i \.(html|htm|css|js)$ 1440 40% 40320
+refresh_pattern -i microsoft.com/.*\.(cab|exe|ms[i|u|f]|[ap]sf|wm[v|a]|dat|zip) 4320 80% 43200 reload-into-ims
+refresh_pattern -i windowsupdate.com/.*\.(cab|exe|ms[i|u|f]|[ap]sf|wm[v|a]|dat|zip) 4320 80% 43200 reload-into-ims
+refresh_pattern -i windows.com/.*\.(cab|exe|ms[i|u|f]|[ap]sf|wm[v|a]|dat|zip) 4320 80% 43200 reload-into-ims
+refresh_pattern ^ftp:           1440    20%     10080
+refresh_pattern ^gopher:        1440    0%      1440
+refresh_pattern -i (/cgi-bin/|\?) 0     0%      0
+refresh_pattern .                 0     40%     40320
